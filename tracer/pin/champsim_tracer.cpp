@@ -134,7 +134,28 @@ void WriteToSet(T* begin, T* end, UINT32 r)
 {
   auto set_end = std::find(begin, end, 0);
   auto found_reg = std::find(begin, set_end, r); // check to see if this register is already in the list
-  *found_reg = r;
+  if (found_reg != end)
+    *found_reg = r;
+}
+
+constexpr ADDRINT CACHE_LINE_SIZE = 64;
+
+// Memory addresses must be 64-bit (WriteToSet takes UINT32, which truncates them).
+// An access that crosses a cache line also records the address of its last byte.
+void WriteMemToSet(unsigned long long* begin, unsigned long long* end, ADDRINT addr, UINT32 size)
+{
+  auto set_end = std::find(begin, end, 0);
+  auto found = std::find(begin, set_end, addr); // check to see if this address is already in the list
+  if (found != end)
+    *found = addr;
+    
+  ADDRINT last = addr + size - 1;
+  if (addr / CACHE_LINE_SIZE != last / CACHE_LINE_SIZE){
+    auto set_end = std::find(begin, end, 0);
+    auto found = std::find(begin, set_end, last); // check to see if this address is already in the list
+    if (found != end)
+      *found = addr;
+  }
 }
 
 VOID StartTracing(VOID* ip)
@@ -239,11 +260,11 @@ VOID Instruction(INS ins, VOID* v)
   // Iterate over each memory operand of the instruction.
   for (UINT32 memOp = 0; memOp < memOperands; memOp++) {
     if (INS_MemoryOperandIsRead(ins, memOp))
-      INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)WriteToSet<unsigned long long int>, IARG_PTR, curr_instr.source_memory, IARG_PTR,
-                     curr_instr.source_memory + NUM_INSTR_SOURCES, IARG_MEMORYOP_EA, memOp, IARG_END);
+      INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)WriteMemToSet, IARG_PTR, curr_instr.source_memory, IARG_PTR,
+                     curr_instr.source_memory + NUM_INSTR_SOURCES, IARG_MEMORYOP_EA, memOp, IARG_MEMORYOP_SIZE, memOp, IARG_END);
     if (INS_MemoryOperandIsWritten(ins, memOp))
-      INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)WriteToSet<unsigned long long int>, IARG_PTR, curr_instr.destination_memory, IARG_PTR,
-                     curr_instr.destination_memory + NUM_INSTR_DESTINATIONS, IARG_MEMORYOP_EA, memOp, IARG_END);
+      INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)WriteMemToSet, IARG_PTR, curr_instr.destination_memory, IARG_PTR,
+                     curr_instr.destination_memory + NUM_INSTR_DESTINATIONS, IARG_MEMORYOP_EA, memOp, IARG_MEMORYOP_SIZE, memOp, IARG_END);
   }
 
   // finalize each instruction with this function
