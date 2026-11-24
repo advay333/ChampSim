@@ -154,7 +154,7 @@ void WriteMemToSet(unsigned long long* begin, unsigned long long* end, ADDRINT a
     auto set_end = std::find(begin, end, 0);
     auto found = std::find(begin, set_end, last); // check to see if this address is already in the list
     if (found != end)
-      *found = addr;
+      *found = last;
   }
 }
 
